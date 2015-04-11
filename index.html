@@ -1,0 +1,133 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <style type="text/css">
+table.sourceCode, tr.sourceCode, td.lineNumbers, td.sourceCode {
+  margin: 0; padding: 0; vertical-align: baseline; border: none; }
+table.sourceCode { width: 100%; line-height: 100%; background-color: #f8f8f8; }
+td.lineNumbers { text-align: right; padding-right: 4px; padding-left: 4px; color: #aaaaaa; border-right: 1px solid #aaaaaa; }
+td.sourceCode { padding-left: 5px; }
+pre, code { background-color: #f8f8f8; }
+code > span.kw { color: #204a87; font-weight: bold; }
+code > span.dt { color: #204a87; }
+code > span.dv { color: #0000cf; }
+code > span.bn { color: #0000cf; }
+code > span.fl { color: #0000cf; }
+code > span.ch { color: #4e9a06; }
+code > span.st { color: #4e9a06; }
+code > span.co { color: #8f5902; font-style: italic; }
+code > span.ot { color: #8f5902; }
+code > span.al { color: #ef2929; }
+code > span.fu { color: #000000; }
+code > span.er { font-weight: bold; }
+  </style>
+  <link rel="stylesheet" href="literate.css" type="text/css" />
+</head>
+<body>
+<h1 id="cs-312-project-haskell">CS 312 Project: Haskell</h1>
+<p>Quint Guvernator, for Xu Liu’s “Programming Languages” course</p>
+<p>9 April 2015</p>
+<h2 id="introduction">Introduction</h2>
+<p>Our goal: given the positions of queens on the game board, establish positions to place knights such that no piece can capture another in one move.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">module</span> <span class="dt">KnightPlace</span> <span class="kw">where</span>
+<span class="kw">import </span><span class="dt">Data.Vector</span> (toList)
+<span class="kw">import </span><span class="dt">Data.Matrix</span> (<span class="dt">Matrix</span>, matrix, getElem, getCol, transpose, elementwise, ncols)</code></pre>
+<p>The input and output encodings given by the spec are strange and not compatable with each other. Input given by the spec is a list of integers where each element represents a column. The integer is equal to the row number of the queen occurring in that column or zero if no queen is present.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">SpecInput</span> <span class="fu">=</span>  [<span class="dt">Int</span>]</code></pre>
+<p>Output given by the spec is a list of columns where each column is a lists of rows where a knight could be placed in that column.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">SpecOutput</span> <span class="fu">=</span> [[<span class="dt">Int</span>]]</code></pre>
+<p>This is weird and disparate and hard to work with. To write functions that compose more elegantly, we will convert input to a form that leverages the power of Haskell’s stdlib: matrices of booleans.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">Gameboard</span> <span class="fu">=</span> <span class="dt">Matrix</span> <span class="dt">Bool</span></code></pre>
+<p>This <code>Gameboard</code> type is equally useful for input (positions of queens) and output (valid positions of knights). On the input, this means that a cell is true iff a queen occupies it. On the knight output, this means that true cells are cells where a knight could be safely placed. Manipulation of data between functions of the same type becomes much easier with this approach. We will need helper functions to convert into and out of this type. Monads would fulfill the same function, and a monadic implementation is left as an exercise to the reader.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">toMatrix ::</span> <span class="dt">SpecInput</span> <span class="ot">-&gt;</span> <span class="dt">Gameboard</span>
+toMatrix queens <span class="fu">=</span> matrix dims dims <span class="fu">$</span> \(i, j) <span class="ot">-&gt;</span> (queens <span class="fu">!!</span> (j <span class="fu">-</span> <span class="dv">1</span>)) <span class="fu">==</span> i
+  <span class="kw">where</span> dims <span class="fu">=</span> length queens</code></pre>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">fromMatrix ::</span> <span class="dt">Gameboard</span> <span class="ot">-&gt;</span> <span class="dt">SpecOutput</span>
+fromMatrix knights <span class="fu">=</span> [ rownums <span class="fu">.</span> toList <span class="fu">$</span> getCol j knights <span class="fu">|</span> j <span class="ot">&lt;-</span> [<span class="dv">1</span><span class="fu">..</span>dims] ]
+  <span class="kw">where</span> dims <span class="fu">=</span> ncols knights</code></pre>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">rownums ::</span> [<span class="dt">Bool</span>] <span class="ot">-&gt;</span> [<span class="dt">Int</span>]
+rownums matrixColumn <span class="fu">=</span> <span class="kw">if</span> null rows <span class="kw">then</span> [<span class="dv">0</span>] <span class="kw">else</span> rows
+  <span class="kw">where</span>
+    dims <span class="fu">=</span> length matrixColumn
+    rows <span class="fu">=</span> [ i <span class="fu">|</span> (val, i) <span class="ot">&lt;-</span> zip matrixColumn [<span class="dv">1</span><span class="fu">..</span>dims], val ]</code></pre>
+<p>We need to wrap our real solver function in the above boilerplate to get the right input and give the right output.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">knightPlace ::</span> <span class="dt">SpecInput</span> <span class="ot">-&gt;</span> <span class="dt">SpecOutput</span>
+knightPlace <span class="fu">=</span> fromMatrix <span class="fu">.</span> knightPlace&#39; <span class="fu">.</span> toMatrix</code></pre>
+<p>With this boilerplate in place, we can begin to write our individual rules.</p>
+<h2 id="solving-the-problem">Solving the problem</h2>
+<p>The rules of chess tell us that queens can attack pieces which are:</p>
+<ol style="list-style-type: decimal">
+<li>in the same column,</li>
+<li>in the same row, or</li>
+<li>diagonally adjacent.</li>
+</ol>
+<p>Additionally, knights can attack pieces in a particular pattern which I won’t try to describe in text. So the answer to our problem is straightforward: Run each rule function and combine the results so that only knight spaces which each rule function approves are given in our solution.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">knightPlace&#39; ::</span> <span class="dt">Gameboard</span> <span class="ot">-&gt;</span> <span class="dt">Gameboard</span>
+knightPlace&#39; queens <span class="fu">=</span> foldr1 (elementwise (<span class="fu">&amp;&amp;</span>)) ruleOutputs
+  <span class="kw">where</span> ruleOutputs <span class="fu">=</span> map (<span class="fu">$</span> queens) [rule1, rule2, rule3, rule4]</code></pre>
+<p>Now that our high-level function is done, let’s pluck away at individual rules. Each rule takes as input queen positions and gives as output places where one could place a knight without violating the rule.</p>
+<h2 id="first-and-second-rules-same-row-or-column">First and second rules: Same row or column</h2>
+<p>First: No knight can be in the same column as a queen.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">rule1 ::</span> <span class="dt">Gameboard</span> <span class="ot">-&gt;</span> <span class="dt">Gameboard</span>
+rule1 queens <span class="fu">=</span> matrix dims dims <span class="fu">$</span> \(i, j) <span class="ot">-&gt;</span> (not <span class="fu">.</span> queenInCol) j
+  <span class="kw">where</span>
+    dims <span class="fu">=</span> ncols queens
+    queenInCol j <span class="fu">=</span> or <span class="fu">.</span> toList <span class="fu">$</span> getCol j queens</code></pre>
+<p><code>or</code> takes a vector and returns true if any element is true.</p>
+<p>Second: No knight can be in the same row as a queen. We can cheat on this rule by flipping the input and feeding it to <code>rule1</code>. Aren’t matrices great?</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">rule2 ::</span> <span class="dt">Gameboard</span> <span class="ot">-&gt;</span> <span class="dt">Gameboard</span>
+rule2 <span class="fu">=</span> transpose <span class="fu">.</span> rule1 <span class="fu">.</span> transpose</code></pre>
+<h2 id="third-rule-diagonal-adjacency">Third rule: Diagonal adjacency</h2>
+<p>Third: No knight can be diagonally adjacent to a queen. We will build a list of queen positions. From this, we will build a list of cells diagonally adjacent to those queen positions. Finally, we will build a matrix such that these positions are not included.</p>
+<p>First, we need to define a bounds-checking function.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">inBounds ::</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> (<span class="dt">Int</span>, <span class="dt">Int</span>) <span class="ot">-&gt;</span> <span class="dt">Bool</span>
+inBounds dims (i, j) <span class="fu">=</span> i <span class="fu">&gt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> j <span class="fu">&gt;</span> <span class="dv">0</span> <span class="fu">&amp;&amp;</span> i <span class="fu">&lt;=</span> dims <span class="fu">&amp;&amp;</span> j <span class="fu">&lt;=</span> dims</code></pre>
+<p>Next, we need a function which allows us to give a starting point and a direction to go (in the form of a “movement” function which takes the current position and returns a new position) and returns a list of all the cells it visited. We’ll use this to qualify what is “diagonally adjacent” to queens.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">MovementFunction</span> <span class="fu">=</span> ((<span class="dt">Int</span>, <span class="dt">Int</span>) <span class="ot">-&gt;</span> (<span class="dt">Int</span>, <span class="dt">Int</span>))
+<span class="ot">scootAround ::</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> <span class="dt">MovementFunction</span> <span class="ot">-&gt;</span> (<span class="dt">Int</span>, <span class="dt">Int</span>) <span class="ot">-&gt;</span> [(<span class="dt">Int</span>, <span class="dt">Int</span>)]
+scootAround bounds nextMove startCell <span class="fu">=</span> takeWhile (inBounds bounds) <span class="fu">$</span> iterate nextMove startCell</code></pre>
+<p>Now we need to define the list of functions which together cover all the possible ways to move diagonally.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">diagMoves ::</span> [<span class="dt">MovementFunction</span>]
+diagMoves <span class="fu">=</span> [ \(i, j) <span class="ot">-&gt;</span> (f i, g j) <span class="fu">|</span> f <span class="ot">&lt;-</span> incDec, g <span class="ot">&lt;-</span> incDec ]
+  <span class="kw">where</span> incDec <span class="fu">=</span> [(<span class="fu">+</span><span class="dv">1</span>), \x <span class="ot">-&gt;</span> x <span class="fu">-</span> <span class="dv">1</span>]</code></pre>
+<p>Finally, we can combine what we now have into a <code>rule3</code> function.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">rule3 ::</span> <span class="dt">Gameboard</span> <span class="ot">-&gt;</span> <span class="dt">Gameboard</span>
+rule3 queens <span class="fu">=</span> matrix dims dims <span class="fu">$</span> \p <span class="ot">-&gt;</span> not (elem p allBadPositions)
+  <span class="kw">where</span>
+    dims <span class="fu">=</span> ncols queens
+    cells <span class="fu">=</span> [ (i, j) <span class="fu">|</span> i <span class="ot">&lt;-</span> [<span class="dv">1</span><span class="fu">..</span>dims], j <span class="ot">&lt;-</span> [<span class="dv">1</span><span class="fu">..</span>dims] ]
+    queenPositions <span class="fu">=</span> [ (i, j) <span class="fu">|</span> (i, j) <span class="ot">&lt;-</span> cells, getElem i j queens ]
+    allBadPositions <span class="fu">=</span> concat [ scootAround dims f p <span class="fu">|</span> f <span class="ot">&lt;-</span> diagMoves, p <span class="ot">&lt;-</span> queenPositions ]</code></pre>
+<p>We’ve finished with our third rule.</p>
+<h2 id="fourth-rule-queens-safe-from-knights">Fourth rule: Queens safe from knights</h2>
+<p>Fourth: no knight can be in a position to attack a queen. We’ll solve this in a very similar way to our third rule, but instead of applying the movement function repeatedly until the result is out of bounds, we instead apply the movement function just once and discard the result if it’s out of bounds.</p>
+<p>To do this, we will need a function similar to <code>scootAround</code> but that only tries to move once. Because it’s a bit simpler, we will modify it so that it takes a list of movement functions, for brevity at the expense of isomorphism with <code>scootAround</code>. Altogether, this function will take a list of movement functions and a starting value and return the destinations of each jump (but not the original position) if they’re in-bounds..</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">jumpTo ::</span> <span class="dt">Int</span> <span class="ot">-&gt;</span> [<span class="dt">MovementFunction</span>] <span class="ot">-&gt;</span> (<span class="dt">Int</span>, <span class="dt">Int</span>) <span class="ot">-&gt;</span> [(<span class="dt">Int</span>, <span class="dt">Int</span>)]
+jumpTo bounds fs spos <span class="fu">=</span> filter (inBounds bounds) <span class="fu">$</span> map (<span class="fu">$</span> spos) fs</code></pre>
+<p>Now we must define how a knight can move. We could do this functionally but at this point I’m a bit tired and don’t mind the extra typing.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">knightMoves ::</span> [<span class="dt">MovementFunction</span>]
+knightMoves <span class="fu">=</span> [
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">+</span> <span class="dv">2</span>, j <span class="fu">+</span> <span class="dv">1</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">+</span> <span class="dv">2</span>, j <span class="fu">-</span> <span class="dv">1</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">-</span> <span class="dv">2</span>, j <span class="fu">+</span> <span class="dv">1</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">-</span> <span class="dv">2</span>, j <span class="fu">-</span> <span class="dv">1</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">+</span> <span class="dv">1</span>, j <span class="fu">+</span> <span class="dv">2</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">+</span> <span class="dv">1</span>, j <span class="fu">-</span> <span class="dv">2</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">-</span> <span class="dv">1</span>, j <span class="fu">+</span> <span class="dv">2</span>)),
+  (\(i, j) <span class="ot">-&gt;</span> (i <span class="fu">-</span> <span class="dv">1</span>, j <span class="fu">-</span> <span class="dv">2</span>))]</code></pre>
+<p>Finally, we can complete the last rule.</p>
+<pre class="sourceCode literate haskell"><code class="sourceCode haskell"><span class="ot">rule4 ::</span> <span class="dt">Gameboard</span> <span class="ot">-&gt;</span> <span class="dt">Gameboard</span>
+rule4 queens <span class="fu">=</span> matrix dims dims <span class="fu">$</span> \p <span class="ot">-&gt;</span> not (elem p allBadPositions)
+  <span class="kw">where</span>
+    dims <span class="fu">=</span> ncols queens
+    cells <span class="fu">=</span> [ (i, j) <span class="fu">|</span> i <span class="ot">&lt;-</span> [<span class="dv">1</span><span class="fu">..</span>dims], j <span class="ot">&lt;-</span> [<span class="dv">1</span><span class="fu">..</span>dims] ]
+    queenPositions <span class="fu">=</span> [ (i, j) <span class="fu">|</span> (i, j) <span class="ot">&lt;-</span> cells, getElem i j queens ]
+    allBadPositions <span class="fu">=</span> concat [ jumpTo dims knightMoves p <span class="fu">|</span> p <span class="ot">&lt;-</span> queenPositions ]</code></pre>
+<p>We’re done, since we already covered the combination of rules and handling of input and output type conversion.</p>
+</body>
+</html>
